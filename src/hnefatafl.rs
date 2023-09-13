@@ -10,6 +10,7 @@ pub enum HnefataflError {
     TargetOutOfBounds,
     MoveNotHorVer,
     WrongPieceColor,
+    IsProtectedTile,
     OtherError(String),
 }
 
@@ -24,6 +25,9 @@ impl Display for HnefataflError {
             HnefataflError::StartOutOfBounds => f.write_str("Start of move out of bounds"),
             HnefataflError::MoveNotHorVer => f.write_str("Move is not horizontal nor vertical"),
             HnefataflError::WrongPieceColor => f.write_str("Trying to move the wrong piece color"),
+            HnefataflError::IsProtectedTile => {
+                f.write_str("Trying to move a soldier to a protected tile")
+            }
             HnefataflError::OtherError(s) => f.write_str(s),
         }
     }
@@ -163,6 +167,14 @@ impl Board {
             return Err(HnefataflError::WrongPieceColor);
         }
 
+        if piece != Piece::King {
+            match (new_x, new_y) {
+                (0, 0) | (10, 0) | (0, 10) | (10, 10) | (5, 5) => {
+                    return Err(HnefataflError::IsProtectedTile);
+                }
+                _ => {}
+            }
+        }
         use Ordering::*;
 
         let (start_x, end_x, start_y, end_y) = match (x.cmp(&new_x), y.cmp(&new_y)) {

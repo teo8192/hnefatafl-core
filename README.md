@@ -37,6 +37,8 @@ The attackers always make the first move.
 The pieces move horizontally and vertically, like the rooks in chess.
 They cannot "jump over" each other.
 
+The five tiles 00, 0X, X0, XX and 55 can only be occupied by the king, and none of the other pieces.
+
 ## Capturing a piece
 
 An attacker or a defender may be captured if they have an opponent piece on both sides (the king can act to capture a piece), or if they have an opponent to one side and the corner tile (00, 0X, X0 and XX) to the other side.
