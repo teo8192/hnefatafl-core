@@ -34,7 +34,7 @@ In this way we have that 00 is the top left tile, 55 is the center, X0 is the bo
 
 The attackers always make the first move.
 
-The pieces move diagonally, like the rooks in chess.
+The pieces move horizontally and vertically, like the rooks in chess.
 They cannot "jump over" each other.
 
 ## Capturing a piece
