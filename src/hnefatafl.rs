@@ -405,6 +405,11 @@ mod tests {
         );
 
         assert_eq!(
+            board.move_piece(0, 3, 0, 0),
+            Err(HnefataflError::IsProtectedTile)
+        );
+
+        assert_eq!(
             board.move_piece(0, 7, 3, 9),
             Err(HnefataflError::MoveNotHorVer)
         );
