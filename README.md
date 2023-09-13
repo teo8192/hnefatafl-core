@@ -6,29 +6,21 @@ Hnefatafl is a viking game, think of it as an old version of chess.
 
 The rules are quite simple: We have attackers and defenders on an 11x11 board set up like this:
 
+```
 -----------------------
 | | | |A|A|A|A|A| | | |
------------------------
 | | | | | |A| | | | | |
------------------------
 | | | | | | | | | | | |
------------------------
 |A| | | | |D| | | | |A|
------------------------
 |A| | | |D|D|D| | | |A|
------------------------
 |A|A| |D|D|K|D|D| |A|A|
------------------------
 |A| | | |D|D|D| | | |A|
------------------------
 |A| | | | |D| | | | |A|
------------------------
 | | | | | | | | | | | |
------------------------
 | | | | | |A| | | | | |
------------------------
 | | | |A|A|A|A|A| | | |
 -----------------------
+```
 
 There are three types of pieces:
  - Attackers
@@ -53,42 +45,56 @@ The King may be captured if there are an attacker on all four adjacent tiles (i.
 ### Example of defender capturing attacker
 
  1.
+ ```
 -------------
 | | | | | | |
--------------
 | |D|A| | |D|
--------------
 | | | | | | |
--------------
+ ```
 
  2.
+ ```
 -------------
 | | | | | | |
--------------
 | |D| |D| | |
--------------
 | | | | | | |
--------------
+ ```
 
 ### Example of attacker walking into being surrounded
 
  1.
+ ```
 -------------
 | | | | | | |
--------------
 | |D| |D| | |
--------------
 | | |A| | | |
--------------
+ ```
 
  2.
+ ```
 -------------
 | | | | | | |
--------------
 | |D|A|D| | |
--------------
 | | | | | | |
+ ```
+
+### Example of attacker being captured by the corner
+
+ 1.
+ ```
 -------------
+| |A| | |D| |
+| | | | | | |
+| | | | | | |
+ ```
+
+ 2.
+ ```
+-------------
+| | |D| | | |
+| | | | | | |
+| | | | | | |
+ ```
 
 ## Winning
 
