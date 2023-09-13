@@ -1,4 +1,63 @@
+use std::cmp::Ordering;
+use std::error::Error;
 use std::fmt::Display;
+
+#[derive(Debug, PartialEq)]
+pub enum HnefataflError {
+    NoPieceToMove,
+    PieceInTheWay,
+    StartOutOfBounds,
+    TargetOutOfBounds,
+    MoveNotHorVer,
+    WrongPieceColor,
+    OtherError(String),
+}
+
+// {{{ impls for error
+
+impl Display for HnefataflError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HnefataflError::NoPieceToMove => f.write_str("No piece to move"),
+            HnefataflError::PieceInTheWay => f.write_str("Piece in the way"),
+            HnefataflError::TargetOutOfBounds => f.write_str("Target of move out of bounds"),
+            HnefataflError::StartOutOfBounds => f.write_str("Start of move out of bounds"),
+            HnefataflError::MoveNotHorVer => f.write_str("Move is not horizontal nor vertical"),
+            HnefataflError::WrongPieceColor => f.write_str("Trying to move the wrong piece color"),
+            HnefataflError::OtherError(s) => f.write_str(s),
+        }
+    }
+}
+
+impl Error for HnefataflError {}
+
+// }}}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Turn {
+    White,
+    Black,
+}
+
+trait Color {
+    fn color(&self) -> Turn;
+    fn is_same_color<C: Color>(&self, other: &C) -> bool {
+        self.color() == other.color()
+    }
+
+    fn opposite(&self) -> Turn {
+        match self.color() {
+            Turn::White => Turn::Black,
+            Turn::Black => Turn::White,
+        }
+    }
+}
+
+impl Color for Turn {
+    fn color(&self) -> Turn {
+        *self
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Piece {
@@ -7,22 +66,31 @@ pub enum Piece {
     Attacker,
 }
 
+impl Color for Piece {
+    fn color(&self) -> Turn {
+        match self {
+            Piece::King => Turn::White,
+            Piece::Defender => Turn::White,
+            Piece::Attacker => Turn::Black,
+        }
+    }
+}
+
 pub struct Board {
     board: [[Option<Piece>; 11]; 11],
+    turn: Turn,
 }
 
 impl Board {
-    pub fn new() -> Board {
-        let mut board = Board {
-            board: [[None; 11]; 11],
-        };
+    pub fn new() -> Self {
+        let mut board = Self::empty();
 
         // placing defenders
         for i in 3..=7 {
             let a = 2 - i32::abs(i - 5);
 
             for j in 5 - a..5 + a + 1 {
-                board.place_piece(Piece::Defender, i as usize, j as usize);
+                board.place_piece(Piece::Defender, i, j);
             }
         }
         board.place_piece(Piece::King, 5, 5);
@@ -42,21 +110,88 @@ impl Board {
         board
     }
 
-    fn place_piece(&mut self, piece: Piece, x: usize, y: usize) {
-        self.board[x][y] = Some(piece);
+    pub fn empty() -> Self {
+        Self {
+            board: [[None; 11]; 11],
+            turn: Turn::Black,
+        }
     }
 
-    fn remove_piece(&mut self, x: usize, y: usize) {
-        self.board[x][y] = None;
+    pub fn get_piece(&self, x: i32, y: i32) -> Option<Piece> {
+        self.board[y as usize][x as usize]
     }
 
-    pub fn move_piece(&mut self, x: usize, y: usize, new_x: usize, new_y: usize) {
-        self.board[new_x][new_y] = self.board[x][y];
-        self.board[x][y] = None;
+    fn place(&mut self, piece: Option<Piece>, x: i32, y: i32) {
+        self.board[y as usize][x as usize] = piece;
     }
 
-    pub fn get_piece(&self, x: usize, y: usize) -> Option<Piece> {
-        self.board[x][y]
+    fn place_piece(&mut self, piece: Piece, x: i32, y: i32) {
+        self.place(Some(piece), x, y);
+    }
+
+    fn remove_piece(&mut self, x: i32, y: i32) {
+        self.place(None, x, y);
+    }
+
+    pub fn move_piece_uncheced(&mut self, x: i32, y: i32, new_x: i32, new_y: i32) {
+        self.place(self.get_piece(x, y), new_x, new_y);
+        self.remove_piece(x, y);
+    }
+
+    pub fn move_piece(
+        &mut self,
+        x: i32,
+        y: i32,
+        new_x: i32,
+        new_y: i32,
+    ) -> Result<(), HnefataflError> {
+        // Important to check ig the bounds are met before trying to access the piece
+        if !(0..=10).contains(&x) || !(0..=10).contains(&y) {
+            return Err(HnefataflError::StartOutOfBounds);
+        }
+        if !(0..=10).contains(&new_x) || !(0..=10).contains(&new_y) {
+            return Err(HnefataflError::TargetOutOfBounds);
+        }
+        // Check if diagonal before accessing memory
+        if x != new_x && y != new_y {
+            return Err(HnefataflError::MoveNotHorVer);
+        }
+
+        let piece = self.get_piece(x, y).ok_or(HnefataflError::NoPieceToMove)?;
+
+        if !self.turn.is_same_color(&piece) {
+            return Err(HnefataflError::WrongPieceColor);
+        }
+
+        use Ordering::*;
+
+        let (start_x, end_x, start_y, end_y) = match (x.cmp(&new_x), y.cmp(&new_y)) {
+            (Less, Equal) => (x + 1, new_x, y, y),
+            (Greater, Equal) => (new_x, x - 1, y, y),
+            (Equal, Less) => (x, x, y + 1, new_y),
+            (Equal, Greater) => (x, x, new_y, y - 1),
+            (a, b) => Err(HnefataflError::OtherError(format!(
+                "Unknown move: ({:?}, {:?})",
+                a, b
+            )))?,
+        };
+
+        for i in start_x..=end_x {
+            for j in start_y..=end_y {
+                if self.get_piece(i, j).is_some() {
+                    return Err(HnefataflError::PieceInTheWay);
+                }
+            }
+        }
+
+        self.remove_piece(x, y);
+        self.place_piece(piece, new_x, new_y);
+
+        // TODO: Check for captures
+
+        self.turn = self.turn.opposite();
+
+        Ok(())
     }
 }
 
@@ -235,5 +370,66 @@ mod tests {
         assert_eq!(board.get_piece(9, 10), None);
         assert_eq!(board.get_piece(10, 10), None);
         // }}}
+    }
+
+    #[test]
+    fn test_move_unchecked() {
+        let mut board = Board::new();
+
+        board.move_piece_uncheced(0, 7, 5, 7);
+
+        assert_eq!(board.get_piece(0, 7), None);
+        assert_eq!(board.get_piece(5, 7), Some(Piece::Attacker));
+    }
+
+    #[test]
+    fn test_move() {
+        let mut board = Board::new();
+
+        // {{{ Errors on move
+        assert_eq!(
+            board.move_piece(1, 7, 4, 7),
+            Err(HnefataflError::NoPieceToMove)
+        );
+
+        assert_eq!(
+            board.move_piece(0, 7, 3, 9),
+            Err(HnefataflError::MoveNotHorVer)
+        );
+
+        assert_eq!(
+            board.move_piece(0, 7, -2, 7),
+            Err(HnefataflError::TargetOutOfBounds)
+        );
+
+        assert_eq!(
+            board.move_piece(0, 7, 0, 11),
+            Err(HnefataflError::TargetOutOfBounds)
+        );
+
+        assert_eq!(
+            board.move_piece(-4, 7, 3, 7),
+            Err(HnefataflError::StartOutOfBounds)
+        );
+
+        assert_eq!(
+            board.move_piece(0, 19, 0, 7),
+            Err(HnefataflError::StartOutOfBounds)
+        );
+
+        assert_eq!(
+            board.move_piece(0, 7, 5, 7),
+            Err(HnefataflError::PieceInTheWay)
+        );
+
+        assert_eq!(
+            board.move_piece(3, 5, 2, 5),
+            Err(HnefataflError::WrongPieceColor)
+        );
+        // }}}
+
+        assert_eq!(board.move_piece(0, 7, 4, 7), Ok(()));
+        assert_eq!(board.get_piece(0, 7), None);
+        assert_eq!(board.get_piece(4, 7), Some(Piece::Attacker));
     }
 }
