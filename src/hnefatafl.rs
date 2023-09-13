@@ -37,6 +37,10 @@ impl Error for HnefataflError {}
 
 // }}}
 
+enum Direction {
+    UpDown, LeftRight
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Turn {
     White,
@@ -204,6 +208,36 @@ impl Board {
         self.turn = self.turn.opposite();
 
         Ok(())
+    }
+
+    /// Try to capture a piece.
+    /// If this piece is captured, then return the piece.
+    fn try_capture(&mut self, x: i32, y: i32, direction: Direction) -> Option<Piece> {
+        let p = self.get_piece(x, y)?;
+
+        // TODO: Check for bounds of the board???
+
+        let (lx, ly) = match direction {
+            Direction::UpDown => (x, y - 1),
+            Direction::LeftRight => (x - 1, y),
+        };
+        let lp = self.get_piece(lx, ly)?;
+
+        let (rx, ry) = match direction {
+            Direction::UpDown => (x, y + 1),
+            Direction::LeftRight => (x + 1, y),
+        };
+        let rp = self.get_piece(rx, ry)?;
+
+        if p != Piece::King && !p.is_same_color(&lp) && !p.is_same_color(&rp) {
+            self.remove_piece(x, y);
+            return Some(p);
+        }
+
+        // TODO: Check if the piece has the back to one of the five special tiles
+        // TODO: Check for king capture
+
+        None
     }
 }
 
