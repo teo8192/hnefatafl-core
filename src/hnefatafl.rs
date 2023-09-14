@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::error::Error;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 #[derive(Debug, PartialEq)]
 pub enum HnefataflError {
@@ -38,7 +38,8 @@ impl Error for HnefataflError {}
 // }}}
 
 enum Direction {
-    UpDown, LeftRight
+    UpDown,
+    LeftRight,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -84,12 +85,23 @@ impl Color for Piece {
     }
 }
 
+#[derive(PartialEq)]
 pub struct Board {
     board: [[Option<Piece>; 11]; 11],
     turn: Turn,
 }
 
+impl Debug for Board {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Board")
+            .field("board", &self.board)
+            .field("turn", &self.turn)
+            .finish()
+    }
+}
+
 impl Board {
+    /// Create a new board with the pieces in their starting positions
     pub fn new() -> Self {
         let mut board = Self::empty();
 
@@ -118,6 +130,7 @@ impl Board {
         board
     }
 
+    /// Create an empty board
     pub fn empty() -> Self {
         Self {
             board: [[None; 11]; 11],
@@ -125,42 +138,63 @@ impl Board {
         }
     }
 
+    /// Set the turn
+    pub fn set_turn(&mut self, turn: Turn) {
+        self.turn = turn;
+    }
+
+    /// Get a piece, but do not check if the coordinates are within bounds
     pub fn get_piece(&self, x: i32, y: i32) -> Option<Piece> {
         self.board[y as usize][x as usize]
     }
 
+    /// Get a piece, but check if the coordinates are within bounds
+    /// returns None if the coordinates are out of bounds
+    pub fn get_piece_checked(&self, x: i32, y: i32) -> Option<Piece> {
+        if !(0..=10).contains(&x) || !(0..=10).contains(&y) {
+            return None;
+        }
+
+        self.board[y as usize][x as usize]
+    }
+
+    /// Place a piece on the board
     fn place(&mut self, piece: Option<Piece>, x: i32, y: i32) {
         self.board[y as usize][x as usize] = piece;
     }
 
+    /// place a piece on the board, but do not check if the coordinates are within bounds
     fn place_piece(&mut self, piece: Piece, x: i32, y: i32) {
         self.place(Some(piece), x, y);
     }
 
+    /// Remove a piece from the board
     fn remove_piece(&mut self, x: i32, y: i32) {
         self.place(None, x, y);
     }
 
+    /// Move a piece without checking if the move is valid
     pub fn move_piece_uncheced(&mut self, x: i32, y: i32, new_x: i32, new_y: i32) {
         self.place(self.get_piece(x, y), new_x, new_y);
         self.remove_piece(x, y);
     }
 
+    /// Move a piece, checking if the move is valid
     pub fn move_piece(
         &mut self,
         x: i32,
         y: i32,
         new_x: i32,
         new_y: i32,
-    ) -> Result<(), HnefataflError> {
-        // Important to check ig the bounds are met before trying to access the piece
+    ) -> Result<Vec<Piece>, HnefataflError> {
+        // Important to check if the bounds are met before trying to access the piece
         if !(0..=10).contains(&x) || !(0..=10).contains(&y) {
             return Err(HnefataflError::StartOutOfBounds);
         }
         if !(0..=10).contains(&new_x) || !(0..=10).contains(&new_y) {
             return Err(HnefataflError::TargetOutOfBounds);
         }
-        // Check if diagonal before accessing memory
+        // Check if bad direction (gotta be rook move)
         if x != new_x && y != new_y {
             return Err(HnefataflError::MoveNotHorVer);
         }
@@ -171,13 +205,8 @@ impl Board {
             return Err(HnefataflError::WrongPieceColor);
         }
 
-        if piece != Piece::King {
-            match (new_x, new_y) {
-                (0, 0) | (10, 0) | (0, 10) | (10, 10) | (5, 5) => {
-                    return Err(HnefataflError::IsProtectedTile);
-                }
-                _ => {}
-            }
+        if piece != Piece::King && self.is_fortress(new_x, new_y) {
+            return Err(HnefataflError::IsProtectedTile);
         }
         use Ordering::*;
 
@@ -203,39 +232,87 @@ impl Board {
         self.remove_piece(x, y);
         self.place_piece(piece, new_x, new_y);
 
-        // TODO: Check for captures
+        // try capture in all directions
+        let mut captures = Vec::new();
+        let mut capture = |x, y, dir| {
+            if let Some(p) = self.try_capture(x, y, dir) {
+                captures.push(p)
+            }
+        };
+        capture(new_x, new_y + 1, Direction::UpDown);
+        capture(new_x, new_y - 1, Direction::UpDown);
+        capture(new_x + 1, new_y, Direction::LeftRight);
+        capture(new_x - 1, new_y, Direction::LeftRight);
 
         self.turn = self.turn.opposite();
 
-        Ok(())
+        // TODO: Check for win conditions (king in the corner, king captured)
+
+        Ok(captures)
+    }
+
+    /// Check if the tile is a fortress tile.
+    ///
+    /// The fortress tiles are (0,0), (0,10), (10,0), (10,10) and (5,5).
+    /// Only the king may occupy a fortress.
+    ///
+    /// The arguments are not checked if they are within bounds
+    fn is_fortress(&self, x: i32, y: i32) -> bool {
+        matches!((x, y), (0, 0) | (0, 10) | (10, 0) | (10, 10) | (5, 5))
+    }
+
+    /// Checks if the specified tile is an enemy tile
+    ///
+    /// Returns false if the tile is out of bounds
+    fn is_enemy(&self, start_piece: &Piece, x: i32, y: i32) -> bool {
+        if !(0..10).contains(&x) || !(0..10).contains(&y) {
+            return false;
+        }
+
+        let check_square = self.get_piece(x, y);
+
+        // if the king occupies a fortress, then the position is not an enemy to the white pieces
+        // This choice could possibly be changed
+        if let Some(piece) = check_square {
+            !start_piece.is_same_color(&piece)
+        } else {
+            // if the square is empty, but is a fortress, then it is an enemy to all pieces
+            // if it is an empty, ordinary tile, then it is not an enemy
+            self.is_fortress(x, y)
+        }
     }
 
     /// Try to capture a piece.
     /// If this piece is captured, then return the piece.
     fn try_capture(&mut self, x: i32, y: i32, direction: Direction) -> Option<Piece> {
-        let p = self.get_piece(x, y)?;
-
-        // TODO: Check for bounds of the board???
+        let p = self.get_piece_checked(x, y)?;
 
         let (lx, ly) = match direction {
             Direction::UpDown => (x, y - 1),
             Direction::LeftRight => (x - 1, y),
         };
-        let lp = self.get_piece(lx, ly)?;
 
         let (rx, ry) = match direction {
             Direction::UpDown => (x, y + 1),
             Direction::LeftRight => (x + 1, y),
         };
-        let rp = self.get_piece(rx, ry)?;
 
-        if p != Piece::King && !p.is_same_color(&lp) && !p.is_same_color(&rp) {
+        // checking for normal capture
+        if p != Piece::King && self.is_enemy(&p, lx, ly) && self.is_enemy(&p, rx, ry) {
             self.remove_piece(x, y);
             return Some(p);
         }
 
-        // TODO: Check if the piece has the back to one of the five special tiles
-        // TODO: Check for king capture
+        // King capture
+        if p == Piece::King
+            && self.is_enemy(&p, x + 1, y)
+            && self.is_enemy(&p, x - 1, y)
+            && self.is_enemy(&p, x, y + 1)
+            && self.is_enemy(&p, x, y - 1)
+        {
+            self.remove_piece(x, y);
+            return Some(p);
+        }
 
         None
     }
@@ -245,6 +322,7 @@ impl Board {
 
 impl Display for Board {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Turn: {:?}", self.turn)?;
         for row in self.board.iter() {
             for piece in row.iter() {
                 match piece {
@@ -479,8 +557,86 @@ mod tests {
         );
         // }}}
 
-        assert_eq!(board.move_piece(0, 7, 4, 7), Ok(()));
+        assert_eq!(board.move_piece(0, 7, 4, 7), Ok(vec![]));
         assert_eq!(board.get_piece(0, 7), None);
         assert_eq!(board.get_piece(4, 7), Some(Piece::Attacker));
+    }
+
+    #[test]
+    fn test_normal_capture() {
+        // Setup board
+        let mut board = Board::empty();
+        board.place_piece(Piece::Attacker, 3, 3);
+        board.place_piece(Piece::Attacker, 5, 7);
+        board.place_piece(Piece::Defender, 4, 3);
+
+        // Expected board
+        let mut expected_board = Board::empty();
+        expected_board.place_piece(Piece::Attacker, 3, 3);
+        expected_board.place_piece(Piece::Attacker, 5, 3);
+        expected_board.set_turn(Turn::White);
+
+        let expected_captures = vec![Piece::Defender];
+
+        // Make move
+        let captured = board.move_piece(5, 7, 5, 3).unwrap();
+
+        // Test
+        assert_eq!(board, expected_board);
+        assert_eq!(captured, expected_captures);
+    }
+
+    #[test]
+    fn test_fortress_capture() {
+        // Setup board
+        let mut board = Board::empty();
+        board.place_piece(Piece::Attacker, 1, 0);
+        board.place_piece(Piece::Defender, 2, 3);
+        board.set_turn(Turn::White);
+
+        // Expected board
+        let mut expected_board = Board::empty();
+        expected_board.place_piece(Piece::Defender, 2, 0);
+        expected_board.set_turn(Turn::Black);
+
+        let expected_captures = vec![Piece::Attacker];
+
+        // Make move
+        let captured = board.move_piece(2, 3, 2, 0).unwrap();
+
+        assert_eq!(board, expected_board);
+        assert_eq!(captured, expected_captures);
+    }
+
+    #[test]
+    fn test_king_capture() {
+        // try a king capture with the fortress
+        // Setup board
+        let mut board = Board::empty();
+        board.set_turn(Turn::Black);
+
+        board.place_piece(Piece::King, 4, 5);
+
+        // Stationary attackers
+        board.place_piece(Piece::Attacker, 4, 4);
+        board.place_piece(Piece::Attacker, 4, 6);
+
+        // The sneaky attacker
+        board.place_piece(Piece::Attacker, 1, 5);
+
+        // Expected board
+        let mut expected_board = Board::empty();
+        expected_board.place_piece(Piece::Attacker, 4, 4);
+        expected_board.place_piece(Piece::Attacker, 4, 6);
+        expected_board.place_piece(Piece::Attacker, 3, 5);
+        expected_board.set_turn(Turn::White);
+
+        let expected_captures = vec![Piece::King];
+
+        // Make move
+        let captured = board.move_piece(1, 5, 3, 5).unwrap();
+
+        assert_eq!(board, expected_board);
+        assert_eq!(captured, expected_captures);
     }
 }
