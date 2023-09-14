@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"hnefatafl":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.72.0/core/clone/trait.Clone.html\" title=\"trait core::clone::Clone\">Clone</a> for <a class=\"enum\" href=\"hnefatafl/hnefatafl/enum.Piece.html\" title=\"enum hnefatafl::hnefatafl::Piece\">Piece</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.72.0/core/clone/trait.Clone.html\" title=\"trait core::clone::Clone\">Clone</a> for <a class=\"enum\" href=\"hnefatafl/hnefatafl/enum.Turn.html\" title=\"enum hnefatafl::hnefatafl::Turn\">Turn</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
