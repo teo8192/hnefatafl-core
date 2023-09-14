@@ -85,6 +85,14 @@ impl Color for Piece {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct Move {
+    from_x: i32,
+    from_y: i32,
+    to_x: i32,
+    to_y: i32,
+}
+
 #[derive(PartialEq)]
 pub struct Board {
     board: [[Option<Piece>; 11]; 11],
@@ -144,7 +152,7 @@ impl Board {
     }
 
     /// Get a piece, but do not check if the coordinates are within bounds
-    pub fn get_piece(&self, x: i32, y: i32) -> Option<Piece> {
+    pub fn get_piece_unchecked(&self, x: i32, y: i32) -> Option<Piece> {
         self.board[y as usize][x as usize]
     }
 
@@ -175,7 +183,7 @@ impl Board {
 
     /// Move a piece without checking if the move is valid
     pub fn move_piece_uncheced(&mut self, x: i32, y: i32, new_x: i32, new_y: i32) {
-        self.place(self.get_piece(x, y), new_x, new_y);
+        self.place(self.get_piece_unchecked(x, y), new_x, new_y);
         self.remove_piece(x, y);
     }
 
@@ -199,7 +207,9 @@ impl Board {
             return Err(HnefataflError::MoveNotHorVer);
         }
 
-        let piece = self.get_piece(x, y).ok_or(HnefataflError::NoPieceToMove)?;
+        let piece = self
+            .get_piece_unchecked(x, y)
+            .ok_or(HnefataflError::NoPieceToMove)?;
 
         if !self.turn.is_same_color(&piece) {
             return Err(HnefataflError::WrongPieceColor);
@@ -223,7 +233,7 @@ impl Board {
 
         for i in start_x..=end_x {
             for j in start_y..=end_y {
-                if self.get_piece(i, j).is_some() {
+                if self.get_piece_unchecked(i, j).is_some() {
                     return Err(HnefataflError::PieceInTheWay);
                 }
             }
@@ -269,7 +279,7 @@ impl Board {
             return false;
         }
 
-        let check_square = self.get_piece(x, y);
+        let check_square = self.get_piece_unchecked(x, y);
 
         // if the king occupies a fortress, then the position is not an enemy to the white pieces
         // This choice could possibly be changed
@@ -316,6 +326,92 @@ impl Board {
 
         None
     }
+
+    /// Returns a list of all target tiles available from the specified tile
+    /// This does check whose turn it is
+    fn moves_from(&self, x: i32, y: i32) -> Vec<(i32, i32)> {
+        if !(0..=10).contains(&x) || !(0..=10).contains(&y) {
+            return Vec::new();
+        }
+
+        // We have already checked the bounds, no need to check again
+        let p = self.get_piece_unchecked(x, y);
+        if p.is_none() || !self.turn.is_same_color(&p.unwrap()) {
+            return Vec::new();
+        }
+
+        // Safe to unwrap, if it is none, then we have already returned
+        let p = p.unwrap();
+        let mut moves = Vec::new();
+
+        // check the square.
+        // Return true if the square is occupied, false if it is empty
+        // (And some logic to handle the fortress)
+        let mut check_square = |x, y| {
+            let check_square = self.get_piece_unchecked(x, y);
+
+            if check_square.is_none()
+                && (!self.is_fortress(x, y) || (self.is_fortress(x, y) && p == Piece::King))
+            {
+                moves.push((x, y));
+                false
+            } else {
+                println!("Hit");
+                true
+            }
+        };
+
+        // Check up
+        for i in (0..y).rev() {
+            if check_square(x, i) {
+                break;
+            }
+        }
+
+        // Check down
+        for i in (y + 1)..11 {
+            if check_square(x, i) {
+                break;
+            }
+        }
+
+        // Check left
+        for i in (0..x).rev() {
+            if check_square(i, y) {
+                break;
+            }
+        }
+
+        // Check right
+        for i in (x + 1)..11 {
+            if check_square(i, y) {
+                break;
+            }
+        }
+
+        moves
+    }
+
+    /// Returns all available moves right now
+    pub fn available_moves(&mut self) -> Vec<Move> {
+        let mut moves = Vec::new();
+        for x in 0..11 {
+            for y in 0..11 {
+                if let Some(true) = self
+                    .get_piece_unchecked(x, y)
+                    .map(|p| self.turn.is_same_color(&p))
+                {
+                    moves.extend(self.moves_from(x, y).into_iter().map(|(to_x, to_y)| Move {
+                        from_x: x,
+                        from_y: y,
+                        to_x,
+                        to_y,
+                    }));
+                }
+            }
+        }
+        moves
+    }
 }
 
 // {{{ Display
@@ -351,6 +447,7 @@ impl Default for Board {
 
 // }}}
 
+// {{{ Tests
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,137 +459,137 @@ mod tests {
         use Piece::*;
 
         // {{{ A lot of asserts
-        assert_eq!(board.get_piece(0, 0), None);
-        assert_eq!(board.get_piece(1, 0), None);
-        assert_eq!(board.get_piece(2, 0), None);
-        assert_eq!(board.get_piece(3, 0), Some(Attacker));
-        assert_eq!(board.get_piece(4, 0), Some(Attacker));
-        assert_eq!(board.get_piece(5, 0), Some(Attacker));
-        assert_eq!(board.get_piece(6, 0), Some(Attacker));
-        assert_eq!(board.get_piece(7, 0), Some(Attacker));
-        assert_eq!(board.get_piece(8, 0), None);
-        assert_eq!(board.get_piece(9, 0), None);
-        assert_eq!(board.get_piece(10, 0), None);
+        assert_eq!(board.get_piece_unchecked(0, 0), None);
+        assert_eq!(board.get_piece_unchecked(1, 0), None);
+        assert_eq!(board.get_piece_unchecked(2, 0), None);
+        assert_eq!(board.get_piece_unchecked(3, 0), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(4, 0), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(5, 0), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(6, 0), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(7, 0), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(8, 0), None);
+        assert_eq!(board.get_piece_unchecked(9, 0), None);
+        assert_eq!(board.get_piece_unchecked(10, 0), None);
 
-        assert_eq!(board.get_piece(0, 1), None);
-        assert_eq!(board.get_piece(1, 1), None);
-        assert_eq!(board.get_piece(2, 1), None);
-        assert_eq!(board.get_piece(3, 1), None);
-        assert_eq!(board.get_piece(4, 1), None);
-        assert_eq!(board.get_piece(5, 1), Some(Attacker));
-        assert_eq!(board.get_piece(6, 1), None);
-        assert_eq!(board.get_piece(7, 1), None);
-        assert_eq!(board.get_piece(8, 1), None);
-        assert_eq!(board.get_piece(9, 1), None);
-        assert_eq!(board.get_piece(10, 1), None);
+        assert_eq!(board.get_piece_unchecked(0, 1), None);
+        assert_eq!(board.get_piece_unchecked(1, 1), None);
+        assert_eq!(board.get_piece_unchecked(2, 1), None);
+        assert_eq!(board.get_piece_unchecked(3, 1), None);
+        assert_eq!(board.get_piece_unchecked(4, 1), None);
+        assert_eq!(board.get_piece_unchecked(5, 1), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(6, 1), None);
+        assert_eq!(board.get_piece_unchecked(7, 1), None);
+        assert_eq!(board.get_piece_unchecked(8, 1), None);
+        assert_eq!(board.get_piece_unchecked(9, 1), None);
+        assert_eq!(board.get_piece_unchecked(10, 1), None);
 
-        assert_eq!(board.get_piece(0, 2), None);
-        assert_eq!(board.get_piece(1, 2), None);
-        assert_eq!(board.get_piece(2, 2), None);
-        assert_eq!(board.get_piece(3, 2), None);
-        assert_eq!(board.get_piece(4, 2), None);
-        assert_eq!(board.get_piece(5, 2), None);
-        assert_eq!(board.get_piece(6, 2), None);
-        assert_eq!(board.get_piece(7, 2), None);
-        assert_eq!(board.get_piece(8, 2), None);
-        assert_eq!(board.get_piece(9, 2), None);
-        assert_eq!(board.get_piece(10, 2), None);
+        assert_eq!(board.get_piece_unchecked(0, 2), None);
+        assert_eq!(board.get_piece_unchecked(1, 2), None);
+        assert_eq!(board.get_piece_unchecked(2, 2), None);
+        assert_eq!(board.get_piece_unchecked(3, 2), None);
+        assert_eq!(board.get_piece_unchecked(4, 2), None);
+        assert_eq!(board.get_piece_unchecked(5, 2), None);
+        assert_eq!(board.get_piece_unchecked(6, 2), None);
+        assert_eq!(board.get_piece_unchecked(7, 2), None);
+        assert_eq!(board.get_piece_unchecked(8, 2), None);
+        assert_eq!(board.get_piece_unchecked(9, 2), None);
+        assert_eq!(board.get_piece_unchecked(10, 2), None);
 
-        assert_eq!(board.get_piece(0, 3), Some(Attacker));
-        assert_eq!(board.get_piece(1, 3), None);
-        assert_eq!(board.get_piece(2, 3), None);
-        assert_eq!(board.get_piece(3, 3), None);
-        assert_eq!(board.get_piece(4, 3), None);
-        assert_eq!(board.get_piece(5, 3), Some(Defender));
-        assert_eq!(board.get_piece(6, 3), None);
-        assert_eq!(board.get_piece(7, 3), None);
-        assert_eq!(board.get_piece(8, 3), None);
-        assert_eq!(board.get_piece(9, 3), None);
-        assert_eq!(board.get_piece(10, 3), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(0, 3), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(1, 3), None);
+        assert_eq!(board.get_piece_unchecked(2, 3), None);
+        assert_eq!(board.get_piece_unchecked(3, 3), None);
+        assert_eq!(board.get_piece_unchecked(4, 3), None);
+        assert_eq!(board.get_piece_unchecked(5, 3), Some(Defender));
+        assert_eq!(board.get_piece_unchecked(6, 3), None);
+        assert_eq!(board.get_piece_unchecked(7, 3), None);
+        assert_eq!(board.get_piece_unchecked(8, 3), None);
+        assert_eq!(board.get_piece_unchecked(9, 3), None);
+        assert_eq!(board.get_piece_unchecked(10, 3), Some(Attacker));
 
-        assert_eq!(board.get_piece(0, 4), Some(Attacker));
-        assert_eq!(board.get_piece(1, 4), None);
-        assert_eq!(board.get_piece(2, 4), None);
-        assert_eq!(board.get_piece(3, 4), None);
-        assert_eq!(board.get_piece(4, 4), Some(Defender));
-        assert_eq!(board.get_piece(5, 4), Some(Defender));
-        assert_eq!(board.get_piece(6, 4), Some(Defender));
-        assert_eq!(board.get_piece(7, 4), None);
-        assert_eq!(board.get_piece(8, 4), None);
-        assert_eq!(board.get_piece(9, 4), None);
-        assert_eq!(board.get_piece(10, 4), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(0, 4), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(1, 4), None);
+        assert_eq!(board.get_piece_unchecked(2, 4), None);
+        assert_eq!(board.get_piece_unchecked(3, 4), None);
+        assert_eq!(board.get_piece_unchecked(4, 4), Some(Defender));
+        assert_eq!(board.get_piece_unchecked(5, 4), Some(Defender));
+        assert_eq!(board.get_piece_unchecked(6, 4), Some(Defender));
+        assert_eq!(board.get_piece_unchecked(7, 4), None);
+        assert_eq!(board.get_piece_unchecked(8, 4), None);
+        assert_eq!(board.get_piece_unchecked(9, 4), None);
+        assert_eq!(board.get_piece_unchecked(10, 4), Some(Attacker));
 
-        assert_eq!(board.get_piece(0, 5), Some(Attacker));
-        assert_eq!(board.get_piece(1, 5), Some(Attacker));
-        assert_eq!(board.get_piece(2, 5), None);
-        assert_eq!(board.get_piece(3, 5), Some(Defender));
-        assert_eq!(board.get_piece(4, 5), Some(Defender));
-        assert_eq!(board.get_piece(5, 5), Some(King));
-        assert_eq!(board.get_piece(6, 5), Some(Defender));
-        assert_eq!(board.get_piece(7, 5), Some(Defender));
-        assert_eq!(board.get_piece(8, 5), None);
-        assert_eq!(board.get_piece(9, 5), Some(Attacker));
-        assert_eq!(board.get_piece(10, 5), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(0, 5), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(1, 5), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(2, 5), None);
+        assert_eq!(board.get_piece_unchecked(3, 5), Some(Defender));
+        assert_eq!(board.get_piece_unchecked(4, 5), Some(Defender));
+        assert_eq!(board.get_piece_unchecked(5, 5), Some(King));
+        assert_eq!(board.get_piece_unchecked(6, 5), Some(Defender));
+        assert_eq!(board.get_piece_unchecked(7, 5), Some(Defender));
+        assert_eq!(board.get_piece_unchecked(8, 5), None);
+        assert_eq!(board.get_piece_unchecked(9, 5), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(10, 5), Some(Attacker));
 
-        assert_eq!(board.get_piece(0, 6), Some(Attacker));
-        assert_eq!(board.get_piece(1, 6), None);
-        assert_eq!(board.get_piece(2, 6), None);
-        assert_eq!(board.get_piece(3, 6), None);
-        assert_eq!(board.get_piece(4, 6), Some(Defender));
-        assert_eq!(board.get_piece(5, 6), Some(Defender));
-        assert_eq!(board.get_piece(6, 6), Some(Defender));
-        assert_eq!(board.get_piece(7, 6), None);
-        assert_eq!(board.get_piece(8, 6), None);
-        assert_eq!(board.get_piece(9, 6), None);
-        assert_eq!(board.get_piece(10, 6), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(0, 6), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(1, 6), None);
+        assert_eq!(board.get_piece_unchecked(2, 6), None);
+        assert_eq!(board.get_piece_unchecked(3, 6), None);
+        assert_eq!(board.get_piece_unchecked(4, 6), Some(Defender));
+        assert_eq!(board.get_piece_unchecked(5, 6), Some(Defender));
+        assert_eq!(board.get_piece_unchecked(6, 6), Some(Defender));
+        assert_eq!(board.get_piece_unchecked(7, 6), None);
+        assert_eq!(board.get_piece_unchecked(8, 6), None);
+        assert_eq!(board.get_piece_unchecked(9, 6), None);
+        assert_eq!(board.get_piece_unchecked(10, 6), Some(Attacker));
 
-        assert_eq!(board.get_piece(0, 7), Some(Attacker));
-        assert_eq!(board.get_piece(1, 7), None);
-        assert_eq!(board.get_piece(2, 7), None);
-        assert_eq!(board.get_piece(3, 7), None);
-        assert_eq!(board.get_piece(4, 7), None);
-        assert_eq!(board.get_piece(5, 7), Some(Defender));
-        assert_eq!(board.get_piece(6, 7), None);
-        assert_eq!(board.get_piece(7, 7), None);
-        assert_eq!(board.get_piece(8, 7), None);
-        assert_eq!(board.get_piece(9, 7), None);
-        assert_eq!(board.get_piece(10, 7), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(0, 7), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(1, 7), None);
+        assert_eq!(board.get_piece_unchecked(2, 7), None);
+        assert_eq!(board.get_piece_unchecked(3, 7), None);
+        assert_eq!(board.get_piece_unchecked(4, 7), None);
+        assert_eq!(board.get_piece_unchecked(5, 7), Some(Defender));
+        assert_eq!(board.get_piece_unchecked(6, 7), None);
+        assert_eq!(board.get_piece_unchecked(7, 7), None);
+        assert_eq!(board.get_piece_unchecked(8, 7), None);
+        assert_eq!(board.get_piece_unchecked(9, 7), None);
+        assert_eq!(board.get_piece_unchecked(10, 7), Some(Attacker));
 
-        assert_eq!(board.get_piece(0, 8), None);
-        assert_eq!(board.get_piece(1, 8), None);
-        assert_eq!(board.get_piece(2, 8), None);
-        assert_eq!(board.get_piece(3, 8), None);
-        assert_eq!(board.get_piece(4, 8), None);
-        assert_eq!(board.get_piece(5, 8), None);
-        assert_eq!(board.get_piece(6, 8), None);
-        assert_eq!(board.get_piece(7, 8), None);
-        assert_eq!(board.get_piece(8, 8), None);
-        assert_eq!(board.get_piece(9, 8), None);
-        assert_eq!(board.get_piece(10, 8), None);
+        assert_eq!(board.get_piece_unchecked(0, 8), None);
+        assert_eq!(board.get_piece_unchecked(1, 8), None);
+        assert_eq!(board.get_piece_unchecked(2, 8), None);
+        assert_eq!(board.get_piece_unchecked(3, 8), None);
+        assert_eq!(board.get_piece_unchecked(4, 8), None);
+        assert_eq!(board.get_piece_unchecked(5, 8), None);
+        assert_eq!(board.get_piece_unchecked(6, 8), None);
+        assert_eq!(board.get_piece_unchecked(7, 8), None);
+        assert_eq!(board.get_piece_unchecked(8, 8), None);
+        assert_eq!(board.get_piece_unchecked(9, 8), None);
+        assert_eq!(board.get_piece_unchecked(10, 8), None);
 
-        assert_eq!(board.get_piece(0, 9), None);
-        assert_eq!(board.get_piece(1, 9), None);
-        assert_eq!(board.get_piece(2, 9), None);
-        assert_eq!(board.get_piece(3, 9), None);
-        assert_eq!(board.get_piece(4, 9), None);
-        assert_eq!(board.get_piece(5, 9), Some(Attacker));
-        assert_eq!(board.get_piece(6, 9), None);
-        assert_eq!(board.get_piece(7, 9), None);
-        assert_eq!(board.get_piece(8, 9), None);
-        assert_eq!(board.get_piece(9, 9), None);
-        assert_eq!(board.get_piece(10, 9), None);
+        assert_eq!(board.get_piece_unchecked(0, 9), None);
+        assert_eq!(board.get_piece_unchecked(1, 9), None);
+        assert_eq!(board.get_piece_unchecked(2, 9), None);
+        assert_eq!(board.get_piece_unchecked(3, 9), None);
+        assert_eq!(board.get_piece_unchecked(4, 9), None);
+        assert_eq!(board.get_piece_unchecked(5, 9), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(6, 9), None);
+        assert_eq!(board.get_piece_unchecked(7, 9), None);
+        assert_eq!(board.get_piece_unchecked(8, 9), None);
+        assert_eq!(board.get_piece_unchecked(9, 9), None);
+        assert_eq!(board.get_piece_unchecked(10, 9), None);
 
-        assert_eq!(board.get_piece(0, 10), None);
-        assert_eq!(board.get_piece(1, 10), None);
-        assert_eq!(board.get_piece(2, 10), None);
-        assert_eq!(board.get_piece(3, 10), Some(Attacker));
-        assert_eq!(board.get_piece(4, 10), Some(Attacker));
-        assert_eq!(board.get_piece(5, 10), Some(Attacker));
-        assert_eq!(board.get_piece(6, 10), Some(Attacker));
-        assert_eq!(board.get_piece(7, 10), Some(Attacker));
-        assert_eq!(board.get_piece(8, 10), None);
-        assert_eq!(board.get_piece(9, 10), None);
-        assert_eq!(board.get_piece(10, 10), None);
+        assert_eq!(board.get_piece_unchecked(0, 10), None);
+        assert_eq!(board.get_piece_unchecked(1, 10), None);
+        assert_eq!(board.get_piece_unchecked(2, 10), None);
+        assert_eq!(board.get_piece_unchecked(3, 10), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(4, 10), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(5, 10), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(6, 10), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(7, 10), Some(Attacker));
+        assert_eq!(board.get_piece_unchecked(8, 10), None);
+        assert_eq!(board.get_piece_unchecked(9, 10), None);
+        assert_eq!(board.get_piece_unchecked(10, 10), None);
         // }}}
     }
 
@@ -502,8 +599,8 @@ mod tests {
 
         board.move_piece_uncheced(0, 7, 5, 7);
 
-        assert_eq!(board.get_piece(0, 7), None);
-        assert_eq!(board.get_piece(5, 7), Some(Piece::Attacker));
+        assert_eq!(board.get_piece_unchecked(0, 7), None);
+        assert_eq!(board.get_piece_unchecked(5, 7), Some(Piece::Attacker));
     }
 
     #[test]
@@ -558,12 +655,12 @@ mod tests {
         // }}}
 
         assert_eq!(board.move_piece(0, 7, 4, 7), Ok(vec![]));
-        assert_eq!(board.get_piece(0, 7), None);
-        assert_eq!(board.get_piece(4, 7), Some(Piece::Attacker));
+        assert_eq!(board.get_piece_unchecked(0, 7), None);
+        assert_eq!(board.get_piece_unchecked(4, 7), Some(Piece::Attacker));
     }
 
     #[test]
-    fn test_normal_capture() {
+    fn normal_capture() {
         // Setup board
         let mut board = Board::empty();
         board.place_piece(Piece::Attacker, 3, 3);
@@ -587,7 +684,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fortress_capture() {
+    fn capturing_with_fortress_assistance() {
         // Setup board
         let mut board = Board::empty();
         board.place_piece(Piece::Attacker, 1, 0);
@@ -609,7 +706,7 @@ mod tests {
     }
 
     #[test]
-    fn test_king_capture() {
+    fn king_being_captured() {
         // try a king capture with the fortress
         // Setup board
         let mut board = Board::empty();
@@ -639,4 +736,129 @@ mod tests {
         assert_eq!(board, expected_board);
         assert_eq!(captured, expected_captures);
     }
+
+    #[test]
+    fn available_moves_from_king_include_fortress() {
+        let mut board = Board::empty();
+        board.set_turn(Turn::White);
+        board.place_piece(Piece::King, 0, 5);
+        board.place_piece(Piece::Attacker, 3, 5);
+        board.place_piece(Piece::Defender, 0, 9);
+
+        let mut expected_moves = vec![
+            (0, 0),
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (0, 4),
+            (0, 6),
+            (0, 7),
+            (0, 8),
+            (1, 5),
+            (2, 5),
+        ];
+
+        let available_moves = board.moves_from(0, 5);
+
+        assert_eq!(available_moves.len(), expected_moves.len());
+
+        for expected_move in expected_moves.drain(..) {
+            assert!(available_moves.contains(&expected_move));
+        }
+    }
+
+    #[test]
+    fn available_moves_from_defender_exclude_fortress() {
+        let mut board = Board::empty();
+        board.set_turn(Turn::White);
+        board.place_piece(Piece::King, 0, 5);
+        board.place_piece(Piece::Attacker, 3, 5);
+        board.place_piece(Piece::Defender, 0, 9);
+
+        let mut expected_moves = vec![
+            (0, 8),
+            (0, 7),
+            (0, 6),
+            (1, 9),
+            (2, 9),
+            (3, 9),
+            (4, 9),
+            (5, 9),
+            (6, 9),
+            (7, 9),
+            (8, 9),
+            (9, 9),
+            (10, 9),
+        ];
+
+        let available_moves = board.moves_from(0, 9);
+
+        assert_eq!(available_moves.len(), expected_moves.len());
+
+        for expected_move in expected_moves.drain(..) {
+            assert!(available_moves.contains(&expected_move));
+        }
+    }
+
+    #[test]
+    fn available_moves_for_defender() {
+        let mut board = Board::empty();
+        board.set_turn(Turn::White);
+        board.place_piece(Piece::King, 0, 5);
+        board.place_piece(Piece::Attacker, 3, 5);
+        board.place_piece(Piece::Defender, 0, 9);
+
+        let expected_moves_defender = vec![
+            (0, 8),
+            (0, 7),
+            (0, 6),
+            (1, 9),
+            (2, 9),
+            (3, 9),
+            (4, 9),
+            (5, 9),
+            (6, 9),
+            (7, 9),
+            (8, 9),
+            (9, 9),
+            (10, 9),
+        ];
+        let expected_moves_king = vec![
+            (0, 0),
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (0, 4),
+            (0, 6),
+            (0, 7),
+            (0, 8),
+            (1, 5),
+            (2, 5),
+        ];
+
+        let expected_moves = expected_moves_defender
+            .into_iter()
+            .map(|(to_x, to_y)| Move {
+                from_x: 0,
+                from_y: 9,
+                to_x,
+                to_y,
+            })
+            .chain(expected_moves_king.into_iter().map(|(to_x, to_y)| Move {
+                from_x: 0,
+                from_y: 5,
+                to_x,
+                to_y,
+            }))
+            .collect::<Vec<_>>();
+
+        let available_moves = board.available_moves();
+
+        assert_eq!(available_moves.len(), expected_moves.len());
+
+        for expected_move in expected_moves {
+            assert!(available_moves.contains(&expected_move));
+        }
+    }
 }
+// }}}
