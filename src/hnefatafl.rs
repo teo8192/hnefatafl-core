@@ -265,6 +265,10 @@ impl Board {
         Ok(captures)
     }
 
+    pub fn do_move(&mut self, m: Move) -> Result<Vec<Piece>, HnefataflError> {
+        self.move_piece(m.from_x, m.from_y, m.to_x, m.to_y)
+    }
+
     /// Check if the tile is a fortress tile.
     ///
     /// The fortress tiles are (0,0), (0,10), (10,0), (10,10) and (5,5).
