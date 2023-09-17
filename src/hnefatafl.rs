@@ -223,6 +223,10 @@ impl Move {
         })
     }
 
+    pub fn compact(self) -> CompactMove {
+        self.into()
+    }
+
     pub fn set_win(&mut self) {
         self.is_win = true;
     }
@@ -300,6 +304,10 @@ impl Board {
 
     pub fn get_turn(&self) -> Turn {
         self.turn
+    }
+
+    pub fn set_won(&mut self, won: bool) {
+        self.is_won = won;
     }
 
     /// Get a piece, but do not check if the coordinates are within bounds
@@ -413,7 +421,7 @@ impl Board {
         capture(new_x - 1, new_y, Direction::Left);
 
         // TODO: Check for win conditions (king in the corner, king captured)
-        if piece == Piece::King  && self.is_fortress(new_x, new_y) {
+        if piece == Piece::King && self.is_fortress(new_x, new_y) {
             mv.set_win();
         }
 
@@ -828,7 +836,10 @@ mod tests {
         );
         // }}}
 
-        assert_eq!(board.move_piece(0, 7, 4, 7), Ok(vec![]));
+        assert_eq!(
+            board.move_piece(0, 7, 4, 7),
+            Move::from(0, 7, 4, 7).map(|m| m.compact())
+        );
         assert_eq!(board.get_piece_unchecked(0, 7), None);
         assert_eq!(board.get_piece_unchecked(4, 7), Some(Piece::Attacker));
     }
@@ -847,14 +858,17 @@ mod tests {
         expected_board.place_piece(Piece::Attacker, 5, 3);
         expected_board.set_turn(Turn::White);
 
-        let expected_captures = vec![Piece::Defender];
+        let expected_move = Move::from(5, 7, 5, 3).map(|mut m| {
+            m.add_capture(Direction::Left).unwrap();
+            m.compact()
+        });
 
         // Make move
-        let captured = board.move_piece(5, 7, 5, 3).unwrap();
+        let captured = board.move_piece(5, 7, 5, 3);
 
         // Test
         assert_eq!(board, expected_board);
-        assert_eq!(captured, expected_captures);
+        assert_eq!(captured, expected_move);
     }
 
     #[test]
@@ -870,13 +884,16 @@ mod tests {
         expected_board.place_piece(Piece::Defender, 2, 0);
         expected_board.set_turn(Turn::Black);
 
-        let expected_captures = vec![Piece::Attacker];
+        let expected_move = Move::from(2, 3, 2, 0).map(|mut m| {
+            m.add_capture(Direction::Left).unwrap();
+            m.compact()
+        });
 
         // Make move
-        let captured = board.move_piece(2, 3, 2, 0).unwrap();
+        let captured = board.move_piece(2, 3, 2, 0);
 
         assert_eq!(board, expected_board);
-        assert_eq!(captured, expected_captures);
+        assert_eq!(captured, expected_move);
     }
 
     #[test]
@@ -900,15 +917,21 @@ mod tests {
         expected_board.place_piece(Piece::Attacker, 4, 4);
         expected_board.place_piece(Piece::Attacker, 4, 6);
         expected_board.place_piece(Piece::Attacker, 3, 5);
-        expected_board.set_turn(Turn::White);
+        // since it is a win, the turn should not change
+        expected_board.set_turn(Turn::Black);
+        expected_board.set_won(true);
 
-        let expected_captures = vec![Piece::King];
+        let expected_move = Move::from(1, 5, 3, 5).map(|mut m| {
+            m.add_capture(Direction::Right).unwrap();
+            m.set_win();
+            m.compact()
+        });
 
         // Make move
-        let captured = board.move_piece(1, 5, 3, 5).unwrap();
+        let performed_move = board.move_piece(1, 5, 3, 5);
 
         assert_eq!(board, expected_board);
-        assert_eq!(captured, expected_captures);
+        assert_eq!(performed_move, expected_move);
     }
 
     #[test]
@@ -1012,18 +1035,12 @@ mod tests {
 
         let expected_moves = expected_moves_defender
             .into_iter()
-            .map(|(to_x, to_y)| Move {
-                from_x: 0,
-                from_y: 9,
-                to_x,
-                to_y,
-            })
-            .chain(expected_moves_king.into_iter().map(|(to_x, to_y)| Move {
-                from_x: 0,
-                from_y: 5,
-                to_x,
-                to_y,
-            }))
+            .map(|(to_x, to_y)| Move::from(0, 9, to_x, to_y).unwrap())
+            .chain(
+                expected_moves_king
+                    .into_iter()
+                    .map(|(to_x, to_y)| Move::from(0, 5, to_x, to_y).unwrap()),
+            )
             .collect::<Vec<_>>();
 
         let available_moves = board.available_moves();
