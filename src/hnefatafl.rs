@@ -133,8 +133,23 @@ pub struct Move {
     is_win: bool,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Copy, Clone)]
 pub struct CompactMove(u32);
+
+impl Debug for CompactMove {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let m: Move = Into::into(*self);
+        f.debug_struct("CompactMove")
+            .field("x", &m.x)
+            .field("y", &m.y)
+            .field("direction", &m.direction)
+            .field("delta", &m.delta)
+            .field("capture_count", &m.capture_count)
+            .field("captures", &m.captures)
+            .field("is_win", &m.is_win)
+            .finish()
+    }
+}
 
 impl From<Move> for CompactMove {
     fn from(m: Move) -> Self {
