@@ -6,5 +6,5 @@
 cargo doc --no-deps
 rm -rf ./docs
 # If you use this script, change the name of the crate here.
-echo "<meta http-equiv=\"refresh\" content=\"0; url=hnefatafl\">" > target/doc/index.html
+echo "<meta http-equiv=\"refresh\" content=\"0; url=hnefatafl_core\">" > target/doc/index.html
 cp -r target/doc ./docs

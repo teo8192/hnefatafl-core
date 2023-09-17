@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["HnefataflError","Piece","Turn"],"struct":["Board","Move"]};
+window.SIDEBAR_ITEMS = {"enum":["Direction","HnefataflError","Piece","Turn"],"struct":["Board","CompactMove","Move"]};
