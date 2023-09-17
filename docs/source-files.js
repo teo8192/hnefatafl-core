@@ -1,4 +1,4 @@
 var sourcesIndex = JSON.parse('{\
-"hnefatafl":["",[],["hnefatafl.rs","lib.rs"]]\
+"hnefatafl_core":["",[],["hnefatafl.rs","lib.rs"]]\
 }');
 createSourceSidebar();

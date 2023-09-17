@@ -1,1 +1,1 @@
-window.ALL_CRATES = ["hnefatafl"];
+window.ALL_CRATES = ["hnefatafl_core"];

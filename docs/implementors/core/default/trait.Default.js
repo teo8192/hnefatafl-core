@@ -1,3 +1,3 @@
 (function() {var implementors = {
-"hnefatafl":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.72.0/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"hnefatafl/hnefatafl/struct.Board.html\" title=\"struct hnefatafl::hnefatafl::Board\">Board</a>"]]
+"hnefatafl_core":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.72.0/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"hnefatafl_core/hnefatafl/struct.Board.html\" title=\"struct hnefatafl_core::hnefatafl::Board\">Board</a>"]]
 };if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
