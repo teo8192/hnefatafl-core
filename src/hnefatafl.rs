@@ -364,7 +364,6 @@ impl Board {
                 moves.push((x, y));
                 false
             } else {
-                println!("Hit");
                 true
             }
         };
