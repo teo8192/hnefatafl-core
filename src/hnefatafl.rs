@@ -397,7 +397,7 @@ impl Board {
     }
 
     /// Returns all available moves right now
-    pub fn available_moves(&mut self) -> Vec<Move> {
+    pub fn available_moves(&self) -> Vec<Move> {
         let mut moves = Vec::new();
         for x in 0..11 {
             for y in 0..11 {
