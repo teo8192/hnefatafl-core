@@ -11,10 +11,12 @@ pub enum HnefataflError {
     MoveNotHorVer,
     WrongPieceColor,
     IsProtectedTile,
+    TooManyCaptures,
+    GameAlreadyWon,
     OtherError(String),
 }
 
-// {{{ impls for error
+// {{{ impels for error
 
 impl Display for HnefataflError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -28,6 +30,8 @@ impl Display for HnefataflError {
             HnefataflError::IsProtectedTile => {
                 f.write_str("Trying to move a soldier to a protected tile")
             }
+            HnefataflError::TooManyCaptures => f.write_str("Too many captures"),
+            HnefataflError::GameAlreadyWon => f.write_str("Game already won"),
             HnefataflError::OtherError(s) => f.write_str(s),
         }
     }
@@ -37,9 +41,42 @@ impl Error for HnefataflError {}
 
 // }}}
 
-enum Direction {
-    UpDown,
-    LeftRight,
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Direction {
+    Up = 0,
+    Right = 1,
+    Down = 2,
+    Left = 3,
+}
+
+impl Direction {
+    fn x(&self) -> i32 {
+        match self {
+            Self::Left => -1,
+            Self::Right => 1,
+            _ => 0,
+        }
+    }
+
+    fn y(&self) -> i32 {
+        match self {
+            Self::Up => -1,
+            Self::Down => 1,
+            _ => 0,
+        }
+    }
+}
+
+impl From<u32> for Direction {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => Self::Up,
+            1 => Self::Right,
+            2 => Self::Down,
+            3 => Self::Left,
+            _ => panic!("Invalid direction"),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -87,16 +124,110 @@ impl Color for Piece {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Move {
-    from_x: i32,
-    from_y: i32,
-    to_x: i32,
-    to_y: i32,
+    x: i32,
+    y: i32,
+    direction: Direction,
+    delta: i32,
+    capture_count: i32,
+    captures: [Direction; 3],
+    is_win: bool,
+}
+
+#[derive(PartialEq)]
+pub struct CompactMove(u32);
+
+impl From<Move> for CompactMove {
+    fn from(m: Move) -> Self {
+        let mut representation = 0;
+
+        representation |= 0b1111 & (m.x as u32);
+        representation |= (0b1111 & (m.y as u32)) << 4;
+        representation |= (0b0011 & (m.direction as u32)) << 8;
+        representation |= (0b1111 & (m.delta as u32)) << 10;
+        representation |= (0b0011 & (m.captures[0] as u32)) << 14;
+        representation |= (0b0011 & (m.captures[1] as u32)) << 16;
+        representation |= (0b0011 & (m.captures[2] as u32)) << 18;
+        representation |= (0b0011 & (m.capture_count as u32)) << 20;
+        representation |= (0b0001 & (m.is_win as u32)) << 22;
+
+        Self(representation)
+    }
+}
+
+impl From<CompactMove> for Move {
+    fn from(value: CompactMove) -> Self {
+        let representation = value.0;
+
+        let x = 0b1111 & representation;
+        let y = 0b1111 & (representation >> 4);
+        let direction = 0b0011 & (representation >> 8);
+        let delta = 0b1111 & (representation >> 10);
+        let capture1 = 0b0011 & (representation >> 14);
+        let capture2 = 0b0011 & (representation >> 16);
+        let capture3 = 0b0011 & (representation >> 18);
+        let capture_count = 0b0011 & (representation >> 20);
+        let is_win = 0b0001 & (representation >> 22);
+
+        Self {
+            x: x as i32,
+            y: y as i32,
+            direction: direction.into(),
+            delta: delta as i32,
+            capture_count: capture_count as i32,
+            captures: [capture1.into(), capture2.into(), capture3.into()],
+            is_win: is_win == 1,
+        }
+    }
+}
+
+impl Move {
+    pub fn from(x: i32, y: i32, to_x: i32, to_y: i32) -> Result<Self, HnefataflError> {
+        let direction = match (to_x - x, to_y - y) {
+            (x, y) if y == 0 && x < 0 => Direction::Left,
+            (x, y) if y == 0 && x > 0 => Direction::Right,
+            (x, y) if y < 0 && x == 0 => Direction::Up,
+            (x, y) if y > 0 && x == 0 => Direction::Down,
+            (_, _) => Err(HnefataflError::MoveNotHorVer)?,
+        };
+
+        let delta = match direction {
+            Direction::Left => x - to_x,
+            Direction::Right => to_x - x,
+            Direction::Up => y - to_y,
+            Direction::Down => to_y - y,
+        };
+
+        Ok(Self {
+            x,
+            y,
+            direction,
+            delta,
+            capture_count: 0,
+            captures: [Direction::Up, Direction::Up, Direction::Up],
+            is_win: false,
+        })
+    }
+
+    pub fn set_win(&mut self) {
+        self.is_win = true;
+    }
+
+    pub fn add_capture(&mut self, capture_direction: Direction) -> Result<(), HnefataflError> {
+        if self.capture_count < 3 {
+            self.captures[self.capture_count as usize] = capture_direction;
+            self.capture_count += 1;
+        } else {
+            Err(HnefataflError::TooManyCaptures)?
+        }
+        Ok(())
+    }
 }
 
 #[derive(PartialEq, Clone)]
 pub struct Board {
     board: [[Option<Piece>; 11]; 11],
     turn: Turn,
+    is_won: bool,
 }
 
 impl Debug for Board {
@@ -143,6 +274,7 @@ impl Board {
         Self {
             board: [[None; 11]; 11],
             turn: Turn::Black,
+            is_won: false,
         }
     }
 
@@ -198,7 +330,7 @@ impl Board {
         y: i32,
         new_x: i32,
         new_y: i32,
-    ) -> Result<Vec<Piece>, HnefataflError> {
+    ) -> Result<CompactMove, HnefataflError> {
         // Important to check if the bounds are met before trying to access the piece
         if !(0..=10).contains(&x) || !(0..=10).contains(&y) {
             return Err(HnefataflError::StartOutOfBounds);
@@ -209,6 +341,9 @@ impl Board {
         // Check if bad direction (gotta be rook move)
         if x != new_x && y != new_y {
             return Err(HnefataflError::MoveNotHorVer);
+        }
+        if self.is_won {
+            return Err(HnefataflError::GameAlreadyWon);
         }
 
         let piece = self
@@ -246,27 +381,43 @@ impl Board {
         self.remove_piece(x, y);
         self.place_piece(piece, new_x, new_y);
 
+        let mut mv = Move::from(x, y, new_x, new_y)?;
+
         // try capture in all directions
-        let mut captures = Vec::new();
         let mut capture = |x, y, dir| {
             if let Some(p) = self.try_capture(x, y, dir) {
-                captures.push(p)
+                if p == Piece::King {
+                    mv.set_win();
+                }
+                mv.add_capture(dir).unwrap();
             }
         };
-        capture(new_x, new_y + 1, Direction::UpDown);
-        capture(new_x, new_y - 1, Direction::UpDown);
-        capture(new_x + 1, new_y, Direction::LeftRight);
-        capture(new_x - 1, new_y, Direction::LeftRight);
-
-        self.turn = self.turn.opposite();
+        capture(new_x, new_y + 1, Direction::Up);
+        capture(new_x, new_y - 1, Direction::Down);
+        capture(new_x + 1, new_y, Direction::Right);
+        capture(new_x - 1, new_y, Direction::Left);
 
         // TODO: Check for win conditions (king in the corner, king captured)
+        if piece == Piece::King  && self.is_fortress(new_x, new_y) {
+            mv.set_win();
+        }
 
-        Ok(captures)
+        if !mv.is_win {
+            self.turn = self.turn.opposite();
+        } else {
+            self.is_won = true;
+        }
+
+        Ok(mv.into())
     }
 
-    pub fn do_move(&mut self, m: &Move) -> Result<Vec<Piece>, HnefataflError> {
-        self.move_piece(m.from_x, m.from_y, m.to_x, m.to_y)
+    pub fn do_move(&mut self, m: &Move) -> Result<CompactMove, HnefataflError> {
+        self.move_piece(
+            m.x,
+            m.y,
+            m.x + m.delta * m.direction.x(),
+            m.y + m.delta * m.direction.y(),
+        )
     }
 
     /// Check if the tile is a fortress tile.
@@ -305,14 +456,16 @@ impl Board {
     fn try_capture(&mut self, x: i32, y: i32, direction: Direction) -> Option<Piece> {
         let p = self.get_piece_checked(x, y)?;
 
+        use Direction::*;
+
         let (lx, ly) = match direction {
-            Direction::UpDown => (x, y - 1),
-            Direction::LeftRight => (x - 1, y),
+            Up | Down => (x, y - 1),
+            Left | Right => (x - 1, y),
         };
 
         let (rx, ry) = match direction {
-            Direction::UpDown => (x, y + 1),
-            Direction::LeftRight => (x + 1, y),
+            Up | Down => (x, y + 1),
+            Left | Right => (x + 1, y),
         };
 
         // checking for normal capture
@@ -408,12 +561,11 @@ impl Board {
                     .get_piece_unchecked(x, y)
                     .map(|p| self.turn.is_same_color(&p))
                 {
-                    moves.extend(self.moves_from(x, y).into_iter().map(|(to_x, to_y)| Move {
-                        from_x: x,
-                        from_y: y,
-                        to_x,
-                        to_y,
-                    }));
+                    moves.extend(
+                        self.moves_from(x, y)
+                            .into_iter()
+                            .map(|(to_x, to_y)| Move::from(x, y, to_x, to_y).unwrap()),
+                    );
                 }
             }
         }
