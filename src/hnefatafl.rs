@@ -599,7 +599,7 @@ impl Display for Board {
                     Some(Piece::King) => f.write_str("K")?,
                     Some(Piece::Defender) => f.write_str("D")?,
                     Some(Piece::Attacker) => f.write_str("A")?,
-                    None => f.write_str(" ")?,
+                    None => f.write_str("-")?,
                 }
             }
             f.write_str("\n")?;
