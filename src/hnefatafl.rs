@@ -310,6 +310,10 @@ impl Board {
         self.is_won = won;
     }
 
+    pub fn is_game_over(&self) -> bool {
+        self.is_won
+    }
+
     /// Get a piece, but do not check if the coordinates are within bounds
     pub fn get_piece_unchecked(&self, x: i32, y: i32) -> Option<Piece> {
         self.board[y as usize][x as usize]
