@@ -85,7 +85,7 @@ impl Color for Piece {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Move {
     from_x: i32,
     from_y: i32,
@@ -265,7 +265,7 @@ impl Board {
         Ok(captures)
     }
 
-    pub fn do_move(&mut self, m: Move) -> Result<Vec<Piece>, HnefataflError> {
+    pub fn do_move(&mut self, m: &Move) -> Result<Vec<Piece>, HnefataflError> {
         self.move_piece(m.from_x, m.from_y, m.to_x, m.to_y)
     }
 
