@@ -93,7 +93,7 @@ pub struct Move {
     to_y: i32,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub struct Board {
     board: [[Option<Piece>; 11]; 11],
     turn: Turn,
