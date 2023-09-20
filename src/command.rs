@@ -43,6 +43,8 @@ enum CommandKind {
     Username = 3,
     RequestHistory = 4,
     ColorSelect = 5,
+    Reset = 6,
+
     IllegalCommand = 255,
 }
 
@@ -54,6 +56,7 @@ pub enum Command {
     Username(String),
     RequestHistory,
     ColorSelect(Turn),
+    Reset,
 
     IllegalCommand,
 }
@@ -131,6 +134,12 @@ fn parse_color_select(input: &[u8]) -> IResult<&[u8], Command> {
     Ok((input, Command::ColorSelect(turn)))
 }
 
+fn parse_reset(input: &[u8]) -> IResult<&[u8], Command> {
+    let (input, _) = tag(&[CommandKind::Reset as u8])(input)?;
+
+    Ok((input, Command::Reset))
+}
+
 fn parse_illegal_command(input: &[u8]) -> IResult<&[u8], Command> {
     let (input, _) = tag(&[CommandKind::IllegalCommand as u8])(input)?;
 
@@ -146,6 +155,7 @@ fn parse_command(input: &[u8]) -> IResult<&[u8], Command> {
         parse_initiate,
         parse_request_history,
         parse_color_select,
+        parse_reset,
         parse_illegal_command,
     ))(input)?;
     println!("{:?}", command);
@@ -226,6 +236,13 @@ impl Command {
                 bytes[1] = *turn as u8;
                 Ok(())
             }
+            Command::Reset => {
+                if bytes.is_empty() {
+                    return Err(CommandError::TooFewBytes(bytes.len() as u8, 1));
+                }
+                bytes[0] = CommandKind::Reset as u8;
+                Ok(())
+            }
             Command::IllegalCommand => {
                 if bytes.is_empty() {
                     return Err(CommandError::TooFewBytes(bytes.len() as u8, 1));
@@ -265,6 +282,8 @@ mod tests {
         test_to_from::<6>(Command::Username("test".to_string()));
         test_to_from::<1>(Command::RequestHistory);
         test_to_from::<2>(Command::ColorSelect(Turn::White));
+
+        test_to_from::<1>(Command::Reset);
 
         test_to_from::<1>(Command::IllegalCommand);
     }
