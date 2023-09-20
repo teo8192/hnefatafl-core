@@ -44,6 +44,7 @@ enum CommandKind {
     RequestHistory = 4,
     ColorSelect = 5,
     Reset = 6,
+    Observer = 7,
 
     IllegalCommand = 255,
 }
@@ -57,6 +58,7 @@ pub enum Command {
     RequestHistory,
     ColorSelect(Turn),
     Reset,
+    Observer,
 
     IllegalCommand,
 }
@@ -140,6 +142,12 @@ fn parse_reset(input: &[u8]) -> IResult<&[u8], Command> {
     Ok((input, Command::Reset))
 }
 
+fn parse_observer(input: &[u8]) -> IResult<&[u8], Command> {
+    let (input, _) = tag(&[CommandKind::Observer as u8])(input)?;
+
+    Ok((input, Command::Observer))
+}
+
 fn parse_illegal_command(input: &[u8]) -> IResult<&[u8], Command> {
     let (input, _) = tag(&[CommandKind::IllegalCommand as u8])(input)?;
 
@@ -147,7 +155,6 @@ fn parse_illegal_command(input: &[u8]) -> IResult<&[u8], Command> {
 }
 
 fn parse_command(input: &[u8]) -> IResult<&[u8], Command> {
-    println!("{:?}", input);
     let (input, command) = alt((
         parse_move,
         parse_illegal_move,
@@ -156,9 +163,9 @@ fn parse_command(input: &[u8]) -> IResult<&[u8], Command> {
         parse_request_history,
         parse_color_select,
         parse_reset,
+        parse_observer,
         parse_illegal_command,
     ))(input)?;
-    println!("{:?}", command);
     let (input, _) = eof(input)?;
 
     Ok((input, command))
@@ -243,6 +250,13 @@ impl Command {
                 bytes[0] = CommandKind::Reset as u8;
                 Ok(())
             }
+            Command::Observer => {
+                if bytes.is_empty() {
+                    return Err(CommandError::TooFewBytes(bytes.len() as u8, 1));
+                }
+                bytes[0] = CommandKind::Observer as u8;
+                Ok(())
+            }
             Command::IllegalCommand => {
                 if bytes.is_empty() {
                     return Err(CommandError::TooFewBytes(bytes.len() as u8, 1));
@@ -282,8 +296,8 @@ mod tests {
         test_to_from::<6>(Command::Username("test".to_string()));
         test_to_from::<1>(Command::RequestHistory);
         test_to_from::<2>(Command::ColorSelect(Turn::White));
-
         test_to_from::<1>(Command::Reset);
+        test_to_from::<1>(Command::Observer);
 
         test_to_from::<1>(Command::IllegalCommand);
     }
