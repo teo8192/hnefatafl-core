@@ -40,6 +40,8 @@ enum CommandKind {
     Move = 0,
     IllegalMove = 1,
     MoveList = 2,
+    Initiate = 3,
+    RequestHistory = 4,
 }
 
 #[derive(Clone)]
@@ -47,6 +49,8 @@ pub enum Command {
     Move(CompactMove),
     IllegalMove(HnefataflError),
     MoveList(Vec<CompactMove>),
+    Initiate(String),
+    RequestHistory,
 }
 
 fn parse_move(input: &[u8]) -> IResult<&[u8], Command> {
@@ -84,8 +88,30 @@ fn parse_move_list(input: &[u8]) -> IResult<&[u8], Command> {
     Ok((input, Command::MoveList(Vec::new())))
 }
 
+fn parse_initiate(input: &[u8]) -> IResult<&[u8], Command> {
+    let (input, _) = tag(&[CommandKind::Initiate as u8])(input)?;
+    let (input, length) = take(1usize)(input)?;
+    let (input, name) = take(length[0])(input)?;
+
+    let name = unsafe { std::str::from_utf8_unchecked(name) };
+
+    Ok((input, Command::Initiate(name.to_string())))
+}
+
+fn parse_request_history(input: &[u8]) -> IResult<&[u8], Command> {
+    let (input, _) = tag(&[CommandKind::RequestHistory as u8])(input)?;
+
+    Ok((input, Command::RequestHistory))
+}
+
 fn parse_command(input: &[u8]) -> IResult<&[u8], Command> {
-    let (input, command) = alt((parse_move, parse_illegal_move, parse_move_list))(input)?;
+    let (input, command) = alt((
+        parse_move,
+        parse_illegal_move,
+        parse_move_list,
+        parse_initiate,
+        parse_request_history,
+    ))(input)?;
     let (input, _) = eof(input)?;
 
     Ok((input, command))
@@ -134,6 +160,25 @@ impl Command {
                     let b: [u8; 4] = (*m).into();
                     bytes[2 + i * 4..2 + (i + 1) * 4].copy_from_slice(&b);
                 }
+                Ok(())
+            }
+            Command::Initiate(name) => {
+                if bytes.len() < 2 + name.len() {
+                    return Err(CommandError::TooFewBytes(
+                        bytes.len() as u8,
+                        2 + name.len() as u8,
+                    ));
+                }
+                bytes[0] = CommandKind::Initiate as u8;
+                bytes[1] = name.len() as u8;
+                bytes[2..2 + name.len()].copy_from_slice(name.as_bytes());
+                Ok(())
+            }
+            Command::RequestHistory => {
+                if bytes.is_empty() {
+                    return Err(CommandError::TooFewBytes(bytes.len() as u8, 1));
+                }
+                bytes[0] = CommandKind::RequestHistory as u8;
                 Ok(())
             }
         }
