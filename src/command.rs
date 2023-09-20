@@ -1,6 +1,6 @@
 use std::{error::Error, fmt::Display};
 
-use crate::{CompactMove, HnefataflError};
+use crate::{CompactMove, HnefataflError, Turn};
 
 use nom::{
     branch::alt,
@@ -40,30 +40,49 @@ enum CommandKind {
     Move = 0,
     IllegalMove = 1,
     MoveList = 2,
-    Initiate = 3,
+    Username = 3,
     RequestHistory = 4,
+    ColorSelect = 5,
     IllegalCommand = 255,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Command {
     Move(CompactMove),
     IllegalMove(HnefataflError),
     MoveList(Vec<CompactMove>),
-    Initiate(String),
+    Username(String),
     RequestHistory,
+    ColorSelect(Turn),
+
     IllegalCommand,
 }
 
-fn parse_move(input: &[u8]) -> IResult<&[u8], Command> {
+fn parse_compact_move(input: &[u8]) -> IResult<&[u8], CompactMove> {
     let mut bytes = [0; 4];
 
-    let (input, _) = tag(&[CommandKind::Move as u8])(input)?;
     let (input, b) = take(4usize)(input)?;
 
     bytes.copy_from_slice(b);
 
-    Ok((input, Command::Move(CompactMove::from(bytes))))
+    Ok((input, CompactMove::from(bytes)))
+}
+
+/// Parse a string that is prefixed by its length.
+fn parse_string(input: &[u8]) -> IResult<&[u8], String> {
+    let (input, length) = take(1usize)(input)?;
+    let (input, name) = take(length[0])(input)?;
+
+    let name = unsafe { std::str::from_utf8_unchecked(name) };
+
+    Ok((input, name.to_string()))
+}
+
+fn parse_move(input: &[u8]) -> IResult<&[u8], Command> {
+    let (input, _) = tag(&[CommandKind::Move as u8])(input)?;
+    let (input, compact_move) = parse_compact_move(input)?;
+
+    Ok((input, Command::Move(compact_move)))
 }
 
 fn parse_illegal_move(input: &[u8]) -> IResult<&[u8], Command> {
@@ -82,28 +101,34 @@ fn parse_move_list(input: &[u8]) -> IResult<&[u8], Command> {
     let mut moves = Vec::with_capacity(num[0] as usize);
 
     for _ in 0..num[0] {
-        let (i, m) = parse_move(input)?;
+        let (i, m) = parse_compact_move(input)?;
         input = i;
         moves.push(m);
     }
 
-    Ok((input, Command::MoveList(Vec::new())))
+    Ok((input, Command::MoveList(moves)))
 }
 
 fn parse_initiate(input: &[u8]) -> IResult<&[u8], Command> {
-    let (input, _) = tag(&[CommandKind::Initiate as u8])(input)?;
-    let (input, length) = take(1usize)(input)?;
-    let (input, name) = take(length[0])(input)?;
+    let (input, _) = tag(&[CommandKind::Username as u8])(input)?;
+    let (input, name) = parse_string(input)?;
 
-    let name = unsafe { std::str::from_utf8_unchecked(name) };
-
-    Ok((input, Command::Initiate(name.to_string())))
+    Ok((input, Command::Username(name)))
 }
 
 fn parse_request_history(input: &[u8]) -> IResult<&[u8], Command> {
     let (input, _) = tag(&[CommandKind::RequestHistory as u8])(input)?;
 
     Ok((input, Command::RequestHistory))
+}
+
+fn parse_color_select(input: &[u8]) -> IResult<&[u8], Command> {
+    let (input, _) = tag(&[CommandKind::ColorSelect as u8])(input)?;
+    let (input, turn) = take(1usize)(input)?;
+
+    let turn = unsafe { std::mem::transmute(turn[0]) };
+
+    Ok((input, Command::ColorSelect(turn)))
 }
 
 fn parse_illegal_command(input: &[u8]) -> IResult<&[u8], Command> {
@@ -113,14 +138,17 @@ fn parse_illegal_command(input: &[u8]) -> IResult<&[u8], Command> {
 }
 
 fn parse_command(input: &[u8]) -> IResult<&[u8], Command> {
+    println!("{:?}", input);
     let (input, command) = alt((
         parse_move,
         parse_illegal_move,
         parse_move_list,
         parse_initiate,
         parse_request_history,
+        parse_color_select,
         parse_illegal_command,
     ))(input)?;
+    println!("{:?}", command);
     let (input, _) = eof(input)?;
 
     Ok((input, command))
@@ -171,14 +199,14 @@ impl Command {
                 }
                 Ok(())
             }
-            Command::Initiate(name) => {
+            Command::Username(name) => {
                 if bytes.len() < 2 + name.len() {
                     return Err(CommandError::TooFewBytes(
                         bytes.len() as u8,
                         2 + name.len() as u8,
                     ));
                 }
-                bytes[0] = CommandKind::Initiate as u8;
+                bytes[0] = CommandKind::Username as u8;
                 bytes[1] = name.len() as u8;
                 bytes[2..2 + name.len()].copy_from_slice(name.as_bytes());
                 Ok(())
@@ -188,6 +216,14 @@ impl Command {
                     return Err(CommandError::TooFewBytes(bytes.len() as u8, 1));
                 }
                 bytes[0] = CommandKind::RequestHistory as u8;
+                Ok(())
+            }
+            Command::ColorSelect(turn) => {
+                if bytes.len() < 2 {
+                    return Err(CommandError::TooFewBytes(bytes.len() as u8, 2));
+                }
+                bytes[0] = CommandKind::ColorSelect as u8;
+                bytes[1] = *turn as u8;
                 Ok(())
             }
             Command::IllegalCommand => {
@@ -207,17 +243,29 @@ mod tests {
 
     use super::*;
 
+    fn test_to_from<const N: usize>(c: Command) {
+        let mut bytes = [0u8; N];
+        c.to_binary(&mut bytes).unwrap();
+        let c2 = Command::from_binary(&bytes).unwrap();
+
+        assert_eq!(c, c2);
+    }
+
     #[test]
-    fn test_command() {
-        let mut bytes = [0u8; 5];
-        let command = Command::Move(Move::from(0, 0, 1, 0).unwrap().compact());
-        command.to_binary(&mut bytes).unwrap();
-        assert_eq!(bytes, [0, 0, 5, 0, 0]);
+    fn test_moves() {
+        test_to_from::<5>(Command::Move(Move::from(0, 0, 1, 0).unwrap().compact()));
+        test_to_from::<2>(Command::IllegalMove(HnefataflError::IllegalMove));
 
-        let command = Command::IllegalMove(HnefataflError::IllegalMove);
-        bytes = [0u8; 5];
+        test_to_from::<{ 2 + 4 * 4 }>(Command::MoveList(vec![
+            Move::from(0, 0, 1, 0).unwrap().compact(),
+            Move::from(0, 0, 2, 0).unwrap().compact(),
+            Move::from(0, 0, 3, 0).unwrap().compact(),
+            Move::from(0, 0, 4, 0).unwrap().compact(),
+        ]));
+        test_to_from::<6>(Command::Username("test".to_string()));
+        test_to_from::<1>(Command::RequestHistory);
+        test_to_from::<2>(Command::ColorSelect(Turn::White));
 
-        command.to_binary(&mut bytes).unwrap();
-        assert_eq!(bytes, [1, HnefataflError::IllegalMove as u8, 0, 0, 0]);
+        test_to_from::<1>(Command::IllegalCommand);
     }
 }

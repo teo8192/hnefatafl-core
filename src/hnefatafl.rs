@@ -81,6 +81,7 @@ impl From<u32> for Direction {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[repr(u8)]
 pub enum Turn {
     White,
     Black,
