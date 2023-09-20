@@ -42,6 +42,7 @@ enum CommandKind {
     MoveList = 2,
     Initiate = 3,
     RequestHistory = 4,
+    IllegalCommand = 255,
 }
 
 #[derive(Clone)]
@@ -51,6 +52,7 @@ pub enum Command {
     MoveList(Vec<CompactMove>),
     Initiate(String),
     RequestHistory,
+    IllegalCommand,
 }
 
 fn parse_move(input: &[u8]) -> IResult<&[u8], Command> {
@@ -104,6 +106,12 @@ fn parse_request_history(input: &[u8]) -> IResult<&[u8], Command> {
     Ok((input, Command::RequestHistory))
 }
 
+fn parse_illegal_command(input: &[u8]) -> IResult<&[u8], Command> {
+    let (input, _) = tag(&[CommandKind::IllegalCommand as u8])(input)?;
+
+    Ok((input, Command::IllegalCommand))
+}
+
 fn parse_command(input: &[u8]) -> IResult<&[u8], Command> {
     let (input, command) = alt((
         parse_move,
@@ -111,6 +119,7 @@ fn parse_command(input: &[u8]) -> IResult<&[u8], Command> {
         parse_move_list,
         parse_initiate,
         parse_request_history,
+        parse_illegal_command,
     ))(input)?;
     let (input, _) = eof(input)?;
 
@@ -179,6 +188,13 @@ impl Command {
                     return Err(CommandError::TooFewBytes(bytes.len() as u8, 1));
                 }
                 bytes[0] = CommandKind::RequestHistory as u8;
+                Ok(())
+            }
+            Command::IllegalCommand => {
+                if bytes.is_empty() {
+                    return Err(CommandError::TooFewBytes(bytes.len() as u8, 1));
+                }
+                bytes[0] = CommandKind::IllegalCommand as u8;
                 Ok(())
             }
         }
