@@ -2,7 +2,8 @@ use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::{Debug, Display};
 
-#[derive(Debug, PartialEq)]
+#[repr(u8)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum HnefataflError {
     NoPieceToMove,
     PieceInTheWay,
@@ -13,7 +14,7 @@ pub enum HnefataflError {
     IsProtectedTile,
     TooManyCaptures,
     GameAlreadyWon,
-    OtherError(String),
+    IllegalMove,
 }
 
 // {{{ impels for error
@@ -32,7 +33,7 @@ impl Display for HnefataflError {
             }
             HnefataflError::TooManyCaptures => f.write_str("Too many captures"),
             HnefataflError::GameAlreadyWon => f.write_str("Game already won"),
-            HnefataflError::OtherError(s) => f.write_str(s),
+            HnefataflError::IllegalMove => f.write_str("Illegal move"),
         }
     }
 }
@@ -148,6 +149,24 @@ impl Debug for CompactMove {
             .field("captures", &m.captures)
             .field("is_win", &m.is_win)
             .finish()
+    }
+}
+
+impl From<[u8; 4]> for CompactMove {
+    fn from(bytes: [u8; 4]) -> Self {
+        Self(u32::from_le_bytes(bytes))
+    }
+}
+
+impl From<&[u8; 4]> for CompactMove {
+    fn from(bytes: &[u8; 4]) -> Self {
+        Self(u32::from_le_bytes(*bytes))
+    }
+}
+
+impl From<CompactMove> for [u8; 4] {
+    fn from(value: CompactMove) -> Self {
+        value.0.to_le_bytes()
     }
 }
 
@@ -391,10 +410,7 @@ impl Board {
             (Greater, Equal) => (new_x, x - 1, y, y),
             (Equal, Less) => (x, x, y + 1, new_y),
             (Equal, Greater) => (x, x, new_y, y - 1),
-            (a, b) => Err(HnefataflError::OtherError(format!(
-                "Unknown move: ({:?}, {:?})",
-                a, b
-            )))?,
+            (_a, _b) => Err(HnefataflError::IllegalMove)?,
         };
 
         for i in start_x..=end_x {
