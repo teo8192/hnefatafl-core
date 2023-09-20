@@ -209,7 +209,13 @@ impl Command {
         }
     }
 
-    pub fn to_binary(&self, bytes: &mut [u8]) -> Result<(), CommandError> {
+    pub fn to_binary_vec(&self) -> Vec<u8> {
+        let mut bytes = [0u8; 256];
+        let length = self.to_binary(&mut bytes).unwrap();
+        bytes[0..length].to_vec()
+    }
+
+    pub fn to_binary(&self, bytes: &mut [u8]) -> Result<usize, CommandError> {
         match self {
             Command::Move(compact_move) => {
                 if bytes.len() < 5 {
@@ -218,7 +224,7 @@ impl Command {
                 bytes[0] = CommandKind::Move as u8;
                 let b: [u8; 4] = (*compact_move).into();
                 bytes[1..5].copy_from_slice(&b);
-                Ok(())
+                Ok(5)
             }
             Command::IllegalMove(error) => {
                 if bytes.len() < 2 {
@@ -226,7 +232,7 @@ impl Command {
                 }
                 bytes[0] = CommandKind::IllegalMove as u8;
                 bytes[1] = *error as u8;
-                Ok(())
+                Ok(2)
             }
             Command::MoveList(moves) => {
                 if bytes.len() < 2 + moves.len() * 4 {
@@ -241,7 +247,7 @@ impl Command {
                     let b: [u8; 4] = (*m).into();
                     bytes[2 + i * 4..2 + (i + 1) * 4].copy_from_slice(&b);
                 }
-                Ok(())
+                Ok(2 + moves.len() * 4)
             }
             Command::Username(name) => {
                 if bytes.len() < 2 + name.len() {
@@ -253,14 +259,14 @@ impl Command {
                 bytes[0] = CommandKind::Username as u8;
                 bytes[1] = name.len() as u8;
                 bytes[2..2 + name.len()].copy_from_slice(name.as_bytes());
-                Ok(())
+                Ok(2 + name.len())
             }
             Command::RequestHistory => {
                 if bytes.is_empty() {
                     return Err(CommandError::TooFewBytes(bytes.len() as u8, 1));
                 }
                 bytes[0] = CommandKind::RequestHistory as u8;
-                Ok(())
+                Ok(1)
             }
             Command::ColorSelect(turn) => {
                 if bytes.len() < 2 {
@@ -268,28 +274,28 @@ impl Command {
                 }
                 bytes[0] = CommandKind::ColorSelect as u8;
                 bytes[1] = *turn as u8;
-                Ok(())
+                Ok(2)
             }
             Command::Reset => {
                 if bytes.is_empty() {
                     return Err(CommandError::TooFewBytes(bytes.len() as u8, 1));
                 }
                 bytes[0] = CommandKind::Reset as u8;
-                Ok(())
+                Ok(1)
             }
             Command::Observer => {
                 if bytes.is_empty() {
                     return Err(CommandError::TooFewBytes(bytes.len() as u8, 1));
                 }
                 bytes[0] = CommandKind::Observer as u8;
-                Ok(())
+                Ok(1)
             }
             Command::IllegalCommand => {
                 if bytes.is_empty() {
                     return Err(CommandError::TooFewBytes(bytes.len() as u8, 1));
                 }
                 bytes[0] = CommandKind::IllegalCommand as u8;
-                Ok(())
+                Ok(1)
             }
         }
     }
@@ -303,9 +309,16 @@ mod tests {
 
     fn test_to_from<const N: usize>(c: Command) {
         let mut bytes = [0u8; N];
-        c.to_binary(&mut bytes).unwrap();
+        let count = c.to_binary(&mut bytes).unwrap();
         let c2 = Command::from_binary(&bytes).unwrap();
 
+        let bytes2 = c2.to_binary_vec();
+        let c3 = Command::from_binary(&bytes2).unwrap();
+
+        assert_eq!(count, bytes2.len());
+        assert_eq!(&c2, &c3);
+
+        assert_eq!(count, N);
         assert_eq!(c, c2);
     }
 
