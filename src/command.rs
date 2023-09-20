@@ -49,6 +49,33 @@ enum CommandKind {
     IllegalCommand = 255,
 }
 
+/// Move contains a move
+/// A user sends move to server, then server sends move to everybody
+///
+/// IllegalMove contains an error
+///
+/// MoveList contains a list of moves (usually as a response to request_history)
+///
+/// Username contains a string, the username
+/// A user sends username to server, then server sends username to everybody
+///
+/// RequestHistory contains no data
+/// A user sends request_history to server, then server sends move_list to user
+///
+/// ColorSelect contains a turn
+/// A response from the server to a new user, telling them which color they are
+/// Could also be received midgame
+///
+/// Reset contains no data
+/// A user sends reset to server, then server sends reset to everybody
+/// When received, reset the game
+///
+/// Observer contains no data
+/// In establishing phase, server might respond with observer instead of ColorSelect if there are
+/// already two players
+///
+/// IllegalCommand contains no data
+/// Usual response when receiving an illegal command
 #[derive(Clone, Debug, PartialEq)]
 pub enum Command {
     Move(CompactMove),
